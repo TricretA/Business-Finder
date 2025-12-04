@@ -1,0 +1,7 @@
+{
+  "name": "AI Business Hunter",
+  "description": "A futuristic internal tool for automated business prospecting, website generation, and outreach.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
