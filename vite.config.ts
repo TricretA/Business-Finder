@@ -9,13 +9,14 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
-    // This allows your existing code using process.env.API_KEY to work
+    // Expose VITE_* env vars via define so they're available at runtime
     define: {
-      // Expose VITE_* env vars so modules can read them as `process.env.VITE_...`
       'process.env.VITE_GOOGLE_API_KEY': JSON.stringify(env.VITE_GOOGLE_API_KEY),
+      'process.env.VITE_GOOGLE_MAPS_API_KEY': JSON.stringify(env.VITE_GOOGLE_MAPS_API_KEY),
       'process.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
       'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
-      // Also keep older keys if some modules look for non-VITE names
+      // Also keep older key names for backwards compatibility
+      'process.env.API_KEY': JSON.stringify(env.VITE_GOOGLE_API_KEY),
       'process.env.SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
       'process.env.SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
     }

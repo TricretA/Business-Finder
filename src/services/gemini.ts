@@ -3,7 +3,12 @@ import { GoogleGenAI } from "@google/genai";
 import { Business, OutreachPackage, WebsiteReview } from "../types";
 
 const getAiClient = () => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Vite's define config injects process.env.VITE_GOOGLE_API_KEY at build time
+  const apiKey = process.env.VITE_GOOGLE_API_KEY || process.env.API_KEY || '';
+  if (!apiKey) {
+    console.warn('VITE_GOOGLE_API_KEY is not set. Gemini AI calls will fail.');
+  }
+  return new GoogleGenAI({ apiKey });
 };
 
 // --- HELPER TO CLEAN JSON ---
@@ -19,29 +24,74 @@ const cleanHtml = (text: string) => {
 
 export const fetchRegions = async (country: string): Promise<string[]> => {
   const ai = getAiClient();
-  const prompt = `List the top 15 administrative regions, states, or counties in ${country}. 
-  Return ONLY a raw JSON array of strings. 
-  Example: ["California", "Texas", "New York"]
-  DO NOT return objects.`;
-
+  
   try {
+    console.log("🔍 Fetching regions for country:", country);
+    
+    const apiKey = import.meta.env.VITE_GOOGLE_API_KEY || '';
+    if (!apiKey) {
+      console.error("❌ VITE_GOOGLE_API_KEY is not set!");
+      return [];
+    }
+    console.log("✓ API Key present (length:", apiKey.length, ")");
+    
+    const prompt = `List the top 15 administrative regions, states, or counties in ${country}. 
+    Return ONLY a raw JSON array of strings. 
+    Example: ["California", "Texas", "New York"]
+    DO NOT return objects.`;
+
+    console.log("📤 Sending request to Gemini API...");
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
     });
-    const text = cleanJson(response.text || "[]");
-    const parsed = JSON.parse(text);
-
-    // Sanitize: Ensure we return an array of strings, even if AI returns objects
-    if (Array.isArray(parsed)) {
-        return parsed.map((item: any) => {
-            if (typeof item === 'string') return item;
-            return item.name || item.region || item.state || item.message || JSON.stringify(item);
-        });
+    
+    console.log("✓ Got response from API");
+    console.log("Response object keys:", Object.keys(response));
+    console.log("Response.text:", response.text);
+    
+    const responseText = response.text;
+    
+    if (!responseText) {
+      console.error("❌ No text in response. Full response:", response);
+      return [];
     }
-    return [];
+    
+    const text = cleanJson(responseText);
+    console.log("📝 Cleaned text:", text);
+    
+    if (!text || text === '[]') {
+      console.warn("⚠️ Empty response");
+      return [];
+    }
+    
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (parseErr) {
+      console.error("❌ JSON parse error:", parseErr);
+      console.error("Failed to parse:", text);
+      return [];
+    }
+
+    // Ensure we have an array
+    if (!Array.isArray(parsed)) {
+      console.error("❌ Response is not an array:", parsed);
+      return [];
+    }
+    
+    const result = parsed.map((item: any) => {
+        if (typeof item === 'string') return item;
+        return item.name || item.region || item.state || item.message || JSON.stringify(item);
+    });
+    
+    console.log("✅ Successfully fetched", result.length, "regions:", result);
+    return result;
+    
   } catch (e) {
-    console.error("Failed to fetch regions", e);
+    console.error("❌ Error fetching regions:", e);
+    console.error("Error message:", (e as any)?.message);
+    console.error("Error code:", (e as any)?.code);
     return [];
   }
 };
