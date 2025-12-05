@@ -8,6 +8,8 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   return {
+    root: 'src',
+    publicDir: '../public',
     plugins: [react()],
     // This allows your existing code using process.env.API_KEY to work
     define: {

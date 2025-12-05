@@ -125,29 +125,135 @@ export const generateWebsitePrompt = async (business: Business): Promise<string>
   // Explicitly highlight enriched data to ensure it's used
   const extraContext = business.enriched_data ? JSON.stringify(business.enriched_data) : "None available";
 
-  const prompt = `Act as a world-class web agency creative director.
-  Generate a comprehensive website prompt for this business:
-  Name: ${business.name}
-  Address: ${business.address}
-  Category: ${business.description}
-  
-  CRITICAL: INCORPORATE THIS RESEARCHED DATA:
-  ${extraContext}
+  const prompt = `You are generating a full professional multi-page business website. Output a structured, detailed website blueprint that can be pasted into an AI Website Builder.
 
-  The prompt should be ready to paste into an AI Website Builder.
-  
-  IMPORTANT: The structure MUST be a SINGLE PAGE Scrollable Website (Landing Page style).
-  Do NOT create separate pages. All content must exist on one long scrolling page with anchor links in the nav.
+**IMPORTANT RULES**
 
-  Include:
-  1. Branding (Colors, Fonts, Vibe)
-  2. Hero Section (Headline, Subhead, CTA)
-  3. Services Section (3-6 key services based on category)
-  4. "Why Choose Us" bullets
-  5. Testimonials (Generate 2 realistic placeholders)
-  6. Footer details
-  
-  Format it clearly with Markdown headers.`;
+* Create a **full multi-page website**, not a single-page landing site.
+* Include **5 to 10 pages** depending on the business type.
+* Design must look **modern, clean, premium, and conversion-focused**.
+* The structure must include: navigation menu, internal links, mobile responsiveness notes, and UI/UX suggestions.
+* Generate realistic, business-specific content — no placeholders except where necessary.
+
+---
+
+## **1. BRANDING**
+
+Provide:
+
+* Primary, secondary, and accent colors
+* Typography pairings
+* Logo description
+* Brand vibe and tone (premium, minimal, friendly, professional, techy, etc.)
+* Image style and visual direction
+
+---
+
+## **2. PAGE LIST**
+
+Create a structured list of all pages, usually including:
+
+* Home
+* About
+* Services (or product line)
+* Service Sub-pages (if relevant)
+* Testimonials / Case Studies
+* Gallery / Portfolio
+* Pricing
+* Contact
+* FAQ
+* Blog / Resources (optional)
+
+Include anchor link names and hierarchy.
+
+---
+
+## **3. PAGE-BY-PAGE CONTENT**
+
+For each page, generate:
+
+### **Page Structure**
+
+* Section-by-section layout
+* Headlines
+* Sub-headlines
+* Paragraph text
+* CTAs
+* Image descriptions
+* Icons or graphics suggestions
+
+### **SEO Optimized**
+
+* Meta title
+* Meta description
+* Keywords
+* Suggested URL slug
+
+### **Modern UI/UX Requirements**
+
+* Full-width hero images
+* Smooth animations
+* Card layouts
+* Clean grids
+* Mobile-first spacing
+* High readability
+
+---
+
+## **4. TESTIMONIALS**
+
+Generate **3–5 realistic client testimonials** with:
+
+* Full name
+* Business or title
+* Short message
+
+---
+
+## **5. CONTACT & FOOTER**
+
+Provide:
+
+* Address
+* Email
+* Phone
+* Map embed suggestion
+* Operating hours
+* Social links
+* Copyright details
+
+---
+
+## **6. ADVANCED FEATURES (Optional based on business type)**
+
+Add relevant enhancements such as:
+
+* Booking system
+* Live chat
+* E-commerce product listing
+* Appointment forms
+* Blog article templates
+* Photo gallery
+* Interactive map
+* FAQ accordion
+
+---
+
+**BUSINESS CONTEXT**
+
+Name: ${business.name}
+Address: ${business.address}
+Category: ${business.description}
+
+**RESEARCHED DATA TO INCORPORATE**
+
+${extraContext}
+
+---
+
+## **OUTPUT FORMAT**
+
+Deliver everything in a clean, well-organized Markdown structure with sections for Branding, Pages, Page Content (by page), Testimonials, and Footer.`;
 
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
@@ -250,16 +356,50 @@ export const reviewWebsiteContent = async (url: string, screenshotBase64?: strin
 
   if (htmlCode) {
     // Code-based review: Simulate visual analysis
-    systemInstruction = `You are an expert UI/UX Design Auditor. 
-    You have been provided with the raw HTML/Tailwind code of a landing page.
-    
-    YOUR TASK:
-    1. MENTALLY RENDER this code into a visual website.
-    2. Analyze the Visual Hierarchy, Color Contrast, Whitespace Balance, and Mobile Responsiveness based on the Tailwind classes used.
-    3. Identify specific flaws in design or conversion optimization.
-    4. Provide a score and actionable improvements.
-    
-    Return valid JSON. Do not use Markdown.`;
+    systemInstruction = `You are a Senior UI/UX Design Auditor and Frontend Rendering Expert.
+
+You will be provided with raw HTML, JSX, or TailwindCSS-based code for a webpage.
+
+YOUR TASKS:
+
+1. Accurately interpret and mentally render the layout, visual structure, spacing, typography, colors, and components as they would appear in a browser.
+
+2. Evaluate the design using the following criteria:
+   - Visual hierarchy and reading order
+   - Typography scale, clarity, and consistency
+   - Color palette, contrast ratios, accessibility compliance
+   - Spacing, padding, alignment, and whitespace distribution
+   - Component consistency and design system adherence
+   - Desktop vs. mobile responsiveness based on Tailwind utility classes
+   - Conversion-focused UX patterns (CTAs, trust signals, layout logic)
+
+3. Identify *specific*, *concrete* issues. Avoid generalities. Point to exact sections, classes, or patterns that cause problems.
+
+4. Provide actionable improvements:
+   - What to change
+   - Why it matters
+   - How it affects UX or conversion
+   - Optional Tailwind class adjustments
+
+5. Assign three scores (0–100):
+   - visual_design_score
+   - usability_score
+   - conversion_score
+
+6. Return a single clean JSON object in the following structure:
+
+{
+  "visual_design_score": number,
+  "usability_score": number,
+  "conversion_score": number,
+  "strengths": [ ... ],
+  "issues": [ ... ],
+  "recommendations": [ ... ],
+  "mobile_responsiveness_notes": [ ... ],
+  "accessibility_issues": [ ... ]
+}
+
+Do not return Markdown. Output only valid JSON.`;
     
     contents = [
         { text: `Analyze this website code for ${url}. 
@@ -269,12 +409,14 @@ export const reviewWebsiteContent = async (url: string, screenshotBase64?: strin
         CODE END.
 
         Return a JSON object with:
-        - design_score (0-10)
-        - conversion_score (0-10)
-        - critique (array of objects: { point: string, box_2d: [0,0,0,0] }) 
-          * For Code Review, keep box_2d as [0,0,0,0] unless you can infer position from the DOM structure.
-        - improvements (array of 3 strings, actionable fixes)
-        - is_approved (boolean, true if score > 7)` }
+        - visual_design_score (0-100)
+        - usability_score (0-100)
+        - conversion_score (0-100)
+        - strengths (array of strings)
+        - issues (array of strings)
+        - recommendations (array of strings)
+        - mobile_responsiveness_notes (array of strings)
+        - accessibility_issues (array of strings)` }
     ];
   } else if (screenshotBase64) {
     // Visual review
@@ -289,13 +431,14 @@ export const reviewWebsiteContent = async (url: string, screenshotBase64?: strin
       Target URL: ${url}
       
       Return a JSON object with:
-      - design_score (0-10)
-      - conversion_score (0-10)
-      - critique (array of objects: { point: string, box_2d: [ymin, xmin, ymax, xmax] })
-        * box_2d should be the bounding box of the issue on a 0-100 scale.
-        * If general, use [0,0,0,0].
-      - improvements (array of 3 strings, actionable fixes)
-      - is_approved (boolean, true if score > 7)` }
+      - visual_design_score (0-100)
+      - usability_score (0-100)
+      - conversion_score (0-100)
+      - strengths (array of strings)
+      - issues (array of strings)
+      - recommendations (array of strings)
+      - mobile_responsiveness_notes (array of strings)
+      - accessibility_issues (array of strings)` }
     ];
   } else {
       throw new Error("No content to review");
@@ -314,20 +457,29 @@ export const reviewWebsiteContent = async (url: string, screenshotBase64?: strin
     const text = cleanJson(response.text || "{}");
     const parsed = JSON.parse(text);
     
-    // Validate structure basics
-    if (!parsed.critique) parsed.critique = [];
-    if (!parsed.improvements) parsed.improvements = [];
-    
-    return parsed;
+    // Validate structure - ensure all required fields exist
+    return {
+      visual_design_score: parsed.visual_design_score || 0,
+      usability_score: parsed.usability_score || 0,
+      conversion_score: parsed.conversion_score || 0,
+      strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [],
+      issues: Array.isArray(parsed.issues) ? parsed.issues : [],
+      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations : [],
+      mobile_responsiveness_notes: Array.isArray(parsed.mobile_responsiveness_notes) ? parsed.mobile_responsiveness_notes : [],
+      accessibility_issues: Array.isArray(parsed.accessibility_issues) ? parsed.accessibility_issues : []
+    };
   } catch (e) {
     console.error("Review parsing failed:", e);
     // Return a fallback object so the UI doesn't crash
     return {
-        design_score: 5,
+        visual_design_score: 5,
+        usability_score: 5,
         conversion_score: 5,
-        critique: [{ point: "AI Review Service encountered an parsing error. Manual review recommended.", box_2d: [0,0,0,0] }],
-        improvements: ["Check manual alignment", "Verify mobile responsiveness"],
-        is_approved: false
+        strengths: [],
+        issues: ["AI Review Service encountered a parsing error. Manual review recommended."],
+        recommendations: ["Check manual alignment", "Verify mobile responsiveness"],
+        mobile_responsiveness_notes: [],
+        accessibility_issues: []
     };
   }
 };
@@ -337,16 +489,40 @@ export const reviewWebsiteContent = async (url: string, screenshotBase64?: strin
 export const generateOutreachMaterials = async (business: Business, websiteUrl: string): Promise<OutreachPackage> => {
   const ai = getAiClient();
 
-  const prompt = `You are a top-tier sales copywriter.
-  Write an outreach package for ${business.name}.
-  We just built them a mockup website at: ${websiteUrl}
-  Details: ${JSON.stringify(business.enriched_data || {})}
-  
-  Generate JSON with these EXACT keys:
-  - cold_email: { subject: string, body: string }
-  - whatsapp: string (The actual message text only, NOT an object)
-  - call_script: string (The actual script text only, NOT an object)
-  `;
+const prompt = `
+You are an elite conversion-focused sales copywriter hired to craft a high-impact outreach package.
+
+TARGET BUSINESS:
+${business.name}
+
+WEBSITE DEMO WE BUILT FOR THEM:
+${websiteUrl}
+
+BUSINESS DATA (Use intelligently, don't dump):
+${JSON.stringify(business.enriched_data || {})}
+
+YOUR JOB:
+1. Analyze the business and identify the strongest pain points and growth opportunities.
+2. Use those insights to write persuasive outreach that feels personal and relevant.
+3. Everything should push the client toward viewing the mockup and booking a call.
+
+OUTPUT STRICTLY AS JSON with these EXACT keys:
+
+{
+  "cold_email": {
+    "subject": "string",
+    "body": "string (short, punchy, and human — avoid sounding like AI)"
+  },
+  "whatsapp": "string (1–2 short messages, conversational, built for quick reading)",
+  "call_script": "string (a confident but friendly script guiding a sales call)"
+}
+
+RULES:
+- No unnecessary fluff.
+- No generic language.
+- Make them feel like we understand their business better than they do.
+- Focus on ROI, revenue growth, and the value of a professional online presence.
+`;
 
   const response = await ai.models.generateContent({
     model: "gemini-3-pro-preview",

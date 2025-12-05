@@ -2,9 +2,12 @@
 import { createClient } from '@supabase/supabase-js';
 import { Business, Session, WebsiteReview, OutreachPackage } from '../types';
 
-// NOTE: Hardcoded for testing. Remove before production.
-const supabaseUrl = 'https://vvyfmdtvfsysciwplwvi.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2eWZtZHR2ZnN5c2Npd3Bsd3ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4NTM2ODYsImV4cCI6MjA4MDQyOTY4Nn0.anj5epsm4-q_DOPY4nJrqv1Va7iOTgjCjzFxyRBfpLM';
+const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing Supabase environment variables (VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY)');
+}
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 

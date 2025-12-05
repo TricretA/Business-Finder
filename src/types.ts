@@ -40,14 +40,14 @@ export interface GeneratedPrompt {
 }
 
 export interface WebsiteReview {
-  design_score: number;
+  visual_design_score: number;
+  usability_score: number;
   conversion_score: number;
-  critique: Array<{
-    point: string;
-    box_2d?: [number, number, number, number]; // [ymin, xmin, ymax, xmax] on 0-100 scale
-  }>;
-  improvements: string[];
-  is_approved: boolean;
+  strengths: string[];
+  issues: string[];
+  recommendations: string[];
+  mobile_responsiveness_notes: string[];
+  accessibility_issues: string[];
 }
 
 export interface OutreachPackage {
