@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import SessionCreator from './SessionCreator';
 import { Session, Business } from '../types';
 import { enrichBusinessData } from '../services/gemini';
@@ -73,14 +73,14 @@ const Dashboard: React.FC = () => {
     <div className="min-h-screen bg-background text-slate-200 p-6 flex flex-col">
       {/* Header */}
       <header className="flex items-center justify-between mb-8 pb-4 border-b border-white/5">
-        <div className="flex items-center gap-3">
+        <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
           <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary to-secondary flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.4)]">
             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
             </svg>
           </div>
           <h1 className="text-xl font-display font-bold tracking-wider text-white">BUSINESS HUNTER <span className="text-xs text-primary font-sans font-normal px-2 py-0.5 rounded-full bg-primary/10 ml-2">BETA</span></h1>
-        </div>
+        </Link>
         <div className="flex items-center gap-4">
             <div className="text-xs text-slate-500 font-mono hidden md:block">
                 DB_STATUS: <span className="text-green-400">CONNECTED</span>

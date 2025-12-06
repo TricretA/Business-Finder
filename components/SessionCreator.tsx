@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { findBusinessesWithGemini, fetchRegions } from '../services/gemini';
-import { createSessionInDb, saveBusinessesToDb } from '../services/supabase';
+import { createSessionInDb, saveBusinessesToDb, fetchSessionsFromDb, fetchBusinessesForSession } from '../services/supabase';
 import { Session, Business } from '../types';
 
 // --- DATASETS ---
@@ -104,6 +104,11 @@ const SessionCreator: React.FC<SessionCreatorProps> = ({ onSessionStart }) => {
   const [isLocationOpen, setIsLocationOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
+  // History State
+  const [showHistory, setShowHistory] = useState(false);
+  const [historySessions, setHistorySessions] = useState<Session[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  
   const locationWrapperRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
@@ -164,6 +169,29 @@ const SessionCreator: React.FC<SessionCreatorProps> = ({ onSessionStart }) => {
     if (selectedRegion && selectedCountry) return `${selectedRegion}, ${selectedCountry}`;
     if (selectedCountry) return selectedCountry;
     return '';
+  };
+
+  const handleOpenHistory = async () => {
+    setShowHistory(!showHistory);
+    if (!showHistory) {
+      setLoadingHistory(true);
+      const sessions = await fetchSessionsFromDb();
+      setHistorySessions(sessions);
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleLoadSession = async (session: Session) => {
+      setLoading(true);
+      setLoadingMessage("RETRIEVING ARCHIVES...");
+      try {
+          const businesses = await fetchBusinessesForSession(session.id);
+          onSessionStart(session, businesses);
+      } catch (e) {
+          alert("Failed to load session data");
+      } finally {
+          setLoading(false);
+      }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -360,10 +388,46 @@ const SessionCreator: React.FC<SessionCreatorProps> = ({ onSessionStart }) => {
 
   return (
     <div className="w-full max-w-2xl mx-auto glass p-8 rounded-3xl animate-fade-in border border-white/5 relative">
-      <h2 className="text-2xl font-display text-white mb-8 border-b border-white/10 pb-4 flex items-center gap-3">
-        <span className="w-2 h-8 bg-primary rounded-full shadow-[0_0_15px_rgba(6,182,212,0.5)]"></span>
-        Target Vector Configuration
-      </h2>
+      <div className="flex justify-between items-center mb-8 border-b border-white/10 pb-4">
+        <h2 className="text-2xl font-display text-white flex items-center gap-3">
+            <span className="w-2 h-8 bg-primary rounded-full shadow-[0_0_15px_rgba(6,182,212,0.5)]"></span>
+            Target Vector Configuration
+        </h2>
+        
+        <div className="relative">
+            <button 
+                onClick={handleOpenHistory}
+                className="text-xs text-slate-400 hover:text-white flex items-center gap-2 uppercase tracking-wider font-bold py-2 px-3 rounded-lg hover:bg-white/5 transition-colors"
+            >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                Load History
+            </button>
+            
+            {showHistory && (
+                <div className="absolute right-0 top-full mt-2 w-64 bg-[#0f172a] border border-white/10 rounded-2xl shadow-2xl z-50 max-h-80 overflow-y-auto custom-scrollbar p-2 ring-1 ring-white/5">
+                    {loadingHistory ? (
+                        <div className="text-center p-4 text-xs text-slate-500">Loading archives...</div>
+                    ) : historySessions.length === 0 ? (
+                        <div className="text-center p-4 text-xs text-slate-500">No previous sessions found.</div>
+                    ) : (
+                        <div className="space-y-1">
+                            {historySessions.map(session => (
+                                <button
+                                    key={session.id}
+                                    onClick={() => handleLoadSession(session)}
+                                    className="w-full text-left p-3 rounded-xl hover:bg-white/5 transition-colors group"
+                                >
+                                    <div className="text-xs font-bold text-white mb-0.5 group-hover:text-primary transition-colors">{session.category}</div>
+                                    <div className="text-[10px] text-slate-400 truncate">{session.location}</div>
+                                    <div className="text-[9px] text-slate-600 mt-1">{new Date(session.created_at).toLocaleDateString()}</div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+      </div>
       
       <form onSubmit={handleSubmit} className="space-y-8">
         {/* ROW 1: Category & Location */}

@@ -1,36 +1,20 @@
-# AI Business Hunter
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-A futuristic internal tool for automated business prospecting, website generation, and outreach powered by Gemini AI.
+# Run and deploy your AI Studio app
 
-## Prerequisites
+This contains everything you need to run your app locally.
 
-- Node.js (v18 or higher)
-- npm or yarn
+View your app in AI Studio: https://ai.studio/apps/drive/1NZ2YTZG4QZ-meOOIWGxfFwLf9z5BSTub
 
-## Installation
+## Run Locally
 
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd ai-business-hunter
-```
+**Prerequisites:**  Node.js
 
-## Environment
 
-Create a `.env` file in the project root when running locally. Copy `.env.example` and paste your keys.
-
-Required (client-facing) env vars:
-
-- `VITE_GOOGLE_MAPS_API_KEY` — Google Maps JavaScript API key (restrict to your domain in Google Cloud Console)
-- `VITE_GOOGLE_API_KEY` — Google API key used by Google GenAI client (if you use server/client GenAI features)
-
-Optional (services):
-
-- `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` — Supabase project config for persistence
-
-Example `.env` creation:
-
-```bash
-cp .env.example .env
-# then paste your keys into .env
-```
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

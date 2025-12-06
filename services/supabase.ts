@@ -2,47 +2,46 @@
 import { createClient } from '@supabase/supabase-js';
 import { Business, Session, WebsiteReview, OutreachPackage } from '../types';
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || '';
+// NOTE: Hardcoded for testing. Remove before production.
+const supabaseUrl = 'https://vvyfmdtvfsysciwplwvi.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2eWZtZHR2ZnN5c2Npd3Bsd3ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4NTM2ODYsImV4cCI6MjA4MDQyOTY4Nn0.anj5epsm4-q_DOPY4nJrqv1Va7iOTgjCjzFxyRBfpLM';
 
-const isSupabaseEnabled = Boolean(supabaseUrl && supabaseKey);
-
-if (!isSupabaseEnabled) {
-  // Don't throw here — allow the app to run in a degraded local-only mode.
-  // Consumers of these services should handle missing network persistence.
-  console.warn('Supabase disabled: missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY');
-}
-
-export const supabase = isSupabaseEnabled ? createClient(supabaseUrl, supabaseKey) : null as any;
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
 // --- SESSIONS ---
 
 export const createSessionInDb = async (sessionData: Partial<Session>) => {
-  if (!isSupabaseEnabled) {
-    // Return a synthetic session object so the app can continue offline.
-    const fake = { id: `local-${Date.now()}`, ...sessionData } as any;
-    return fake;
-  }
-
   const { data, error } = await supabase
     .from('sessions')
-    .insert([
-      {
-        category: sessionData.category,
-        location: sessionData.location,
-        rating_min: sessionData.rating_min,
-        rating_max: sessionData.rating_max,
-        website_filter: sessionData.website_filter,
-        review_count_min: sessionData.review_count_min,
-        include_media: sessionData.include_media,
-        status: 'active'
-      }
-    ])
+    .insert([{
+      category: sessionData.category,
+      location: sessionData.location,
+      rating_min: sessionData.rating_min,
+      rating_max: sessionData.rating_max,
+      website_filter: sessionData.website_filter,
+      review_count_min: sessionData.review_count_min,
+      include_media: sessionData.include_media,
+      status: 'active'
+    }])
     .select()
     .single();
 
   if (error) throw error;
   return data;
+};
+
+export const fetchSessionsFromDb = async (): Promise<Session[]> => {
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (error) {
+    console.error("Error fetching sessions:", error);
+    return [];
+  }
+  return data || [];
 };
 
 // --- BUSINESSES ---
@@ -60,10 +59,6 @@ export const saveBusinessesToDb = async (sessionId: string, businesses: Business
     confidence_score: 80, // Default confidence
     is_verified: false
   }));
-  if (!isSupabaseEnabled) {
-    // Return the input but inject local IDs so the UI can work with them
-    return rows.map((r, i) => ({ ...r, id: `local-biz-${Date.now()}-${i}` }));
-  }
 
   const { data, error } = await supabase
     .from('businesses')
@@ -74,17 +69,36 @@ export const saveBusinessesToDb = async (sessionId: string, businesses: Business
   return data; // Returns businesses with real UUIDs
 };
 
-export const updateBusinessInDb = async (businessId: string, updates: Partial<any>) => {
-  if (!isSupabaseEnabled) {
-    console.warn('updateBusinessInDb skipped (supabase disabled)', businessId, updates);
-    return;
-  }
+export const fetchBusinessesForSession = async (sessionId: string): Promise<Business[]> => {
+  const { data, error } = await supabase
+    .from('businesses')
+    .select('*')
+    .eq('session_id', sessionId);
 
+  if (error) {
+    console.error("Error fetching businesses:", error);
+    return [];
+  }
+  
+  // Map DB columns back to Business interface if needed
+  // Enriched data usually stored in a jsonb column or notes, depending on schema
+  // Here assuming standard columns match mostly.
+  return data.map((row: any) => ({
+      ...row,
+      enriched_data: {
+          phones: row.phone ? [row.phone] : [],
+          media_assets: row.media, // Assuming media is jsonb
+          // If we shoved other enriched data into notes or specific columns, parse here
+      }
+  })) || [];
+};
+
+export const updateBusinessInDb = async (businessId: string, updates: Partial<any>) => {
   const { error } = await supabase
     .from('businesses')
     .update(updates)
     .eq('id', businessId);
-
+    
   if (error) console.error("Error updating business:", error);
 };
 

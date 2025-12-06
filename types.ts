@@ -40,14 +40,15 @@ export interface GeneratedPrompt {
 }
 
 export interface WebsiteReview {
-  visual_design_score: number;
-  usability_score: number;
+  design_score: number;
   conversion_score: number;
-  strengths: string[];
-  issues: string[];
-  recommendations: string[];
-  mobile_responsiveness_notes: string[];
-  accessibility_issues: string[];
+  critique: Array<{
+    point: string;
+    box_2d?: [number, number, number, number]; // [ymin, xmin, ymax, xmax] on 0-100 scale
+    related_code_snippet?: string; // Exact code match for highlighting
+  }>;
+  improvements: string[];
+  is_approved: boolean;
 }
 
 export interface OutreachPackage {
@@ -57,6 +58,15 @@ export interface OutreachPackage {
   };
   whatsapp: string;
   call_script: string;
+  follow_ups: Array<{
+    subject: string;
+    body: string;
+    delay: string; // e.g. "2 days later"
+  }>;
+  objections: Array<{
+    objection: string;
+    response: string;
+  }>;
 }
 
-export type ProcessingStage = 'PROMPT' | 'BUILD' | 'REVIEW' | 'OUTREACH';
+export type ProcessingStage = 'PROMPT' | 'BUILD' | 'REVIEW' | 'OUTREACH' | 'SUMMARY';
