@@ -275,7 +275,7 @@ export const refineWebsitePrompt = async (currentPrompt: string, feedback: strin
     return response.text || currentPrompt;
 };
 
-export const generateWebsiteCode = async (business: Business, approvedPrompt: string, designStyle: string = "Modern Professional"): Promise<string> => {
+export const generateWebsiteCode = async (business: Business, approvedPrompt: string, designStyle: string = "Modern Professional", websiteType: string = "Landing Page"): Promise<string> => {
     const ai = getAiClient();
 
     const prompt = `You are an expert Frontend Developer.
@@ -283,18 +283,28 @@ export const generateWebsiteCode = async (business: Business, approvedPrompt: st
     
     "${approvedPrompt}"
     
-    **DESIGN STYLE**: ${designStyle}
+    **DESIGN PARAMETERS**:
+    - **STYLE**: ${designStyle} (Adhere STRICTLY to this aesthetic).
+    - **TYPE**: ${websiteType} (Optimize layout for this specific use-case).
     
-    **CRITICAL TECHNICAL REQUIREMENT**:
-    - **Single File SPA**: You must build this as a SINGLE 'index.html' file that functions as a multi-page website.
-    - **Navigation Logic**: Use Vanilla JavaScript to hide/show different \`<section>\` elements based on the Navigation Menu clicks (e.g., clicking "About" hides Home and shows the About section).
-    - **Architecture**:
+    **CRITICAL TECHNICAL REQUIREMENTS**:
+    1. **Single File SPA**: You must build this as a SINGLE 'index.html' file that functions as a multi-page website.
+    2. **Navigation Logic**: Use Vanilla JavaScript to hide/show different \`<section>\` elements based on the Navigation Menu clicks (e.g., clicking "About" hides Home and shows the About section).
+    3. **Architecture**:
         - Fixed Navigation Bar (Home, About, Services, Contact).
         - Distinct Sections with IDs: \`#home\`, \`#about\`, \`#services\`, \`#contact\`.
         - Default View: Show Home, hide others on load.
-    - **Tech Stack**: HTML5 and Tailwind CSS (via CDN) ONLY. No React, Vue, or external routing libraries.
-    - **Design**: Use high-quality Tailwind utility classes for a premium look (shadows, rounded corners, gradients, responsive grids).
-    - **Icons**: Use Font Awesome (via CDN).
+    4. **Tech Stack**: HTML5 and Tailwind CSS (via CDN) ONLY. No React, Vue, or external routing libraries.
+    5. **Design**: Use high-quality Tailwind utility classes for a premium look (shadows, rounded corners, gradients, responsive grids).
+    6. **Icons**: Use Font Awesome (via CDN).
+    
+    **IMAGE GENERATION INSTRUCTIONS (IMPORTANT)**:
+    - Do NOT use broken placeholder images.
+    - You MUST use the following URL format to "generate" images relevant to the business:
+      \`https://image.pollinations.ai/prompt/{description}?nologo=true\`
+    - Example: For a dentist, use \`https://image.pollinations.ai/prompt/dentist%20clinic%20modern?nologo=true\`.
+    - Example: For a hero background, use \`https://image.pollinations.ai/prompt/abstract%20${designStyle.replace(' ', '%20')}%20background?nologo=true\`.
+    - Ensure every image tag has a valid src using this method.
     
     **OUTPUT**:
     - Return ONLY the raw HTML code (starting with <!DOCTYPE html>).

@@ -82,7 +82,6 @@ export const fetchBusinessesForSession = async (sessionId: string): Promise<Busi
   
   // Map DB columns back to Business interface if needed
   // Enriched data usually stored in a jsonb column or notes, depending on schema
-  // Here assuming standard columns match mostly.
   return data.map((row: any) => ({
       ...row,
       enriched_data: {
@@ -100,6 +99,44 @@ export const updateBusinessInDb = async (businessId: string, updates: Partial<an
     .eq('id', businessId);
     
   if (error) console.error("Error updating business:", error);
+};
+
+// --- PROJECT STATE (FOR RESUMING) ---
+
+export const fetchProjectState = async (businessId: string) => {
+    // Run queries in parallel
+    const [promptRes, websiteRes, reviewRes, outreachRes] = await Promise.all([
+        supabase.from('prompts').select('*').eq('business_id', businessId).order('created_at', { ascending: false }).limit(1).single(),
+        supabase.from('websites').select('*').eq('business_id', businessId).order('created_at', { ascending: false }).limit(1).single(),
+        supabase.from('reviews').select('*').eq('business_id', businessId).order('created_at', { ascending: false }).limit(1).single(),
+        supabase.from('outreach').select('*').eq('business_id', businessId).order('created_at', { ascending: false }).limit(1).single()
+    ]);
+
+    return {
+        prompt: promptRes.data?.generated_prompt || null,
+        website: websiteRes.data ? {
+            url: websiteRes.data.url,
+            code: websiteRes.data.source_code,
+            screenshot: websiteRes.data.screenshots?.[0] || null
+        } : null,
+        review: reviewRes.data ? {
+            design_score: reviewRes.data.design_score,
+            conversion_score: reviewRes.data.conversion_score,
+            critique: reviewRes.data.issues || [],
+            improvements: reviewRes.data.suggestions || [],
+            is_approved: reviewRes.data.status === 'APPROVED'
+        } as WebsiteReview : null,
+        outreach: outreachRes.data ? {
+            cold_email: { 
+                subject: outreachRes.data.subject_lines?.[0] || "Draft", 
+                body: outreachRes.data.cold_email_full 
+            },
+            whatsapp: outreachRes.data.whatsapp_pitch,
+            call_script: outreachRes.data.call_script,
+            follow_ups: outreachRes.data.followups || [], // Assuming column name might be 'followups' (jsonb) based on schema
+            objections: outreachRes.data.objections || []
+        } as OutreachPackage : null
+    };
 };
 
 // --- PROMPTS ---
@@ -168,6 +205,8 @@ export const saveOutreachToDb = async (businessId: string, outreach: OutreachPac
         subject_lines: [outreach.cold_email.subject], // Storing as array
         whatsapp_pitch: outreach.whatsapp,
         call_script: outreach.call_script,
+        followups: outreach.follow_ups, // JSONB
+        objections: outreach.objections, // JSONB
         status: 'GENERATED'
     };
 

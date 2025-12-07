@@ -26,6 +26,22 @@ import { sendEmail } from '../services/email';
 // Declare Prism global to avoid TS errors as it's loaded via CDN
 declare const Prism: any;
 
+const WEBSITE_STYLES = [
+    "Modern Professional", "Minimalist Clean", "Dark Mode High-Tech", 
+    "Creative Vibrant", "Corporate Trustworthy", "Luxury Elegant", 
+    "Brutalist Bold", "Startup SaaS", "Retro Vintage", "Playful Pop",
+    "Neumorphism Soft", "Cyberpunk Neon", "Bento Grid Layout", 
+    "Typographic Editorial", "Monochromatic Focus", "Nature/Eco Friendly",
+    "Industrial Raw", "Glassmorphism Frost", "Material Design 3", "Apple-esque"
+];
+
+const WEBSITE_TYPES = [
+    "Landing Page", "Multi-Page Site", "Portfolio/Showcase", "E-commerce/Store",
+    "SaaS Dashboard", "Blog/News Magazine", "Restaurant/Menu", "Real Estate Listing",
+    "Event/Conference", "Non-Profit/Charity", "Medical/Clinic", "Legal Firm",
+    "Educational/Course", "Gym/Fitness", "Hotel/Booking", "Personal Resume"
+];
+
 const BusinessProcessor: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -47,6 +63,7 @@ const BusinessProcessor: React.FC = () => {
 
   // Build Options
   const [designStyle, setDesignStyle] = useState('Modern Professional');
+  const [websiteType, setWebsiteType] = useState('Landing Page');
 
   // Refinement State
   const [refinementText, setRefinementText] = useState('');
@@ -70,12 +87,23 @@ const BusinessProcessor: React.FC = () => {
   
   // Toast
   const [toast, setToast] = useState<string | null>(null);
+  const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
 
   // --- PERSISTENCE ---
 
   useEffect(() => {
-    // If we have a business ID, try to load saved state
-    if (business?.id) {
+    // If router state has full data (resume mode), load it
+    if (location.state?.stage) {
+        setStage(location.state.stage);
+        setPrompt(location.state.prompt || '');
+        setWebsiteUrl(location.state.websiteUrl || '');
+        setGeneratedCode(location.state.generatedCode || '');
+        setScreenshot(location.state.screenshot || null);
+        setReview(location.state.review || null);
+        setOutreach(location.state.outreach || null);
+    } 
+    // Otherwise fallback to localStorage if available
+    else if (business?.id) {
         const savedData = localStorage.getItem(`proc_${business.id}`);
         if (savedData) {
             const parsed = JSON.parse(savedData);
@@ -92,7 +120,7 @@ const BusinessProcessor: React.FC = () => {
             }
         }
     }
-  }, [business?.id]);
+  }, [business?.id, location.state]);
 
   useEffect(() => {
     // Save state whenever it changes
@@ -119,7 +147,7 @@ const BusinessProcessor: React.FC = () => {
   
   // Effect to trigger Prism Highlight
   useEffect(() => {
-      if (stage === 'REVIEW' && reviewViewMode === 'CODE' && generatedCode && typeof Prism !== 'undefined') {
+      if ((stage === 'REVIEW' || stage === 'BUILD') && reviewViewMode === 'CODE' && generatedCode && typeof Prism !== 'undefined') {
           // Small timeout to ensure DOM is ready
           setTimeout(() => {
               Prism.highlightAll();
@@ -172,6 +200,7 @@ const BusinessProcessor: React.FC = () => {
       // Move to Summary Stage instead of exiting
       setStage('SUMMARY');
       handleManualSave(); // Auto save
+      setShowFinalizeConfirm(false);
   };
 
 
@@ -254,7 +283,8 @@ const BusinessProcessor: React.FC = () => {
       if (!business || !prompt) return alert("Generate and approve a prompt first.");
       setLoading(true);
       try {
-          const code = await generateWebsiteCode(business, prompt, designStyle);
+          // Now passing designStyle AND websiteType
+          const code = await generateWebsiteCode(business, prompt, designStyle, websiteType);
           setGeneratedCode(code);
           const url = `${business.name.replace(/\s/g, '').toLowerCase()}.internal-preview.com`;
           setWebsiteUrl(url);
@@ -322,6 +352,9 @@ const BusinessProcessor: React.FC = () => {
 **Design Score:** ${review?.design_score || 'N/A'}/10
 **Conversion Score:** ${review?.conversion_score || 'N/A'}/10
 
+### Website Blueprint (Prompt)
+${prompt}
+
 ### Review Highlights
 ${review?.improvements.map(i => `- ${i}`).join('\n') || 'None'}
 
@@ -353,7 +386,6 @@ ${outreach?.call_script}
       if (!review || !generatedCode) return;
       setLoading(true);
       try {
-          // Construct explicit instructions from both critique points and improvements
           const instructions = `
             CRITICAL ISSUES TO FIX:
             ${review.critique.map(c => `- ${c.point}`).join('\n')}
@@ -368,13 +400,17 @@ ${outreach?.call_script}
           
           if (newCode && newCode !== generatedCode) {
             setGeneratedCode(newCode);
-            setStage('BUILD');
+            // DO NOT switch to BUILD stage. Stay in REVIEW but update the code view.
+            setReviewViewMode('VISUAL');
             
             // DB Save
             if(business?.id) await saveWebsiteToDb(business.id, websiteUrl, newCode, screenshot || '');
-            showToast("Fixes Applied Automatically");
+            showToast("Fixes Applied In-Place. Code Updated.");
+            
+            // Re-trigger review with new code automatically? Optional.
+            // For now, just show the updated code.
           } else {
-            showToast("AI made no significant changes. Try manual refinement.");
+            showToast("AI made no significant changes.");
           }
 
       } catch (e) {
@@ -625,7 +661,6 @@ ${outreach?.call_script}
     }
     
     // Naive split rendering with Prism Highlight logic
-    // Since we're injecting Prism via CDN, we use standard code blocks but can inject marks
     
     let safeHtml = generatedCode
         .replace(/&/g, "&amp;")
@@ -649,7 +684,6 @@ ${outreach?.call_script}
             .replace(/'/g, "&#039;");
 
         const isActive = activeCritiqueIndex === h.index;
-        // Prism will ignore inside <mark>, so this works nicely
         const className = isActive 
             ? "bg-red-500/50 text-white px-1 rounded ring-2 ring-red-400" 
             : "bg-yellow-500/20 text-yellow-200 px-1 rounded";
@@ -678,6 +712,23 @@ ${outreach?.call_script}
            <div className="fixed top-6 right-6 z-50 bg-green-500/10 border border-green-500/20 text-green-400 px-6 py-3 rounded-full backdrop-blur-md animate-fade-in flex items-center gap-2">
                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                <span className="text-sm font-bold">{toast}</span>
+           </div>
+       )}
+
+       {/* Confirmation Modal */}
+       {showFinalizeConfirm && (
+           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in">
+               <div className="bg-slate-900 border border-white/10 rounded-3xl p-8 max-w-sm w-full text-center">
+                    <div className="w-12 h-12 bg-yellow-500/10 text-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    </div>
+                    <h3 className="text-xl font-display font-bold text-white mb-2">Finalize Mission?</h3>
+                    <p className="text-sm text-slate-400 mb-6">This will complete the outreach stage and generate the final intelligence summary.</p>
+                    <div className="flex gap-4 justify-center">
+                        <button onClick={() => setShowFinalizeConfirm(false)} className="px-6 py-2 text-slate-400 hover:text-white">Cancel</button>
+                        <button onClick={handleFinalize} className="px-6 py-2 bg-primary text-slate-900 font-bold rounded-full hover:bg-primary/90">Confirm</button>
+                    </div>
+               </div>
            </div>
        )}
 
@@ -783,12 +834,12 @@ ${outreach?.call_script}
                 </div>
             )}
 
-            {/* RIGHT: Workflow Area (8 Cols usually, 12 cols on Summary) */}
+            {/* RIGHT: Workflow Area */}
             <div className={`col-span-1 ${stage === 'SUMMARY' ? 'lg:col-span-12' : 'lg:col-span-8'}`}>
                 <div className={`glass p-8 rounded-3xl border border-white/5 min-h-[600px] relative ${stage === 'SUMMARY' ? 'bg-slate-900/80' : ''}`}>
                     
-                    {/* STAGE 1, 2, 3 [HIDDEN FOR BREVITY - ALREADY IN FILE] */}
-                    {stage === 'PROMPT' && (/* ... PROMPT UI ... */ 
+                    {/* STAGE 1: PROMPT */}
+                    {stage === 'PROMPT' && (
                         <div className="animate-fade-in space-y-6">
                             <div className="flex justify-between items-center">
                                 <h2 className="text-xl font-display text-white">AI Architect Protocol</h2>
@@ -848,9 +899,9 @@ ${outreach?.call_script}
                         </div>
                     )}
                     
-                    {stage === 'BUILD' && (/* ... BUILD UI ... */ 
+                    {/* STAGE 2: BUILD */}
+                    {stage === 'BUILD' && (
                         <div className="animate-fade-in space-y-8">
-                             {/* ... Same as before ... */}
                              <h2 className="text-xl font-display text-white flex justify-between items-center">
                                 <span>Construction Phase</span>
                                 <span className="text-xs font-sans font-normal text-slate-500 bg-white/5 px-2 py-1 rounded">Select Method</span>
@@ -859,7 +910,7 @@ ${outreach?.call_script}
                                 <div className="col-span-1 md:col-span-2 space-y-4">
                                      <div className={`p-1 rounded-3xl bg-gradient-to-r from-primary/20 via-secondary/20 to-primary/20 ${loading ? 'animate-pulse' : ''}`}>
                                         <div className="bg-slate-900 rounded-[22px] p-6">
-                                            <div className="flex justify-between items-start mb-4">
+                                            <div className="flex flex-col md:flex-row justify-between items-start mb-4 gap-4">
                                                 <div>
                                                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
                                                         <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
@@ -867,23 +918,25 @@ ${outreach?.call_script}
                                                     </h3>
                                                     <p className="text-xs text-slate-400 mt-1">Generate a full single-page site code instantly.</p>
                                                 </div>
-                                                <div className="flex items-center gap-3">
+                                                <div className="flex flex-wrap items-center gap-3">
+                                                    {/* Style Selector */}
                                                     <select 
                                                         value={designStyle}
                                                         onChange={(e) => setDesignStyle(e.target.value)}
-                                                        className="bg-black/30 border border-white/10 text-xs text-white rounded-lg px-3 py-2 outline-none focus:border-primary"
+                                                        className="bg-black/30 border border-white/10 text-xs text-white rounded-lg px-3 py-2 outline-none focus:border-primary max-w-[150px]"
                                                     >
-                                                        <option value="Modern Professional">Modern Professional</option>
-                                                        <option value="Minimalist Clean">Minimalist Clean</option>
-                                                        <option value="Dark Mode High-Tech">Dark Mode High-Tech</option>
-                                                        <option value="Creative Vibrant">Creative Vibrant</option>
-                                                        <option value="Corporate Trustworthy">Corporate Trustworthy</option>
-                                                        <option value="Luxury Elegant">Luxury Elegant</option>
-                                                        <option value="Brutalist Bold">Brutalist Bold</option>
-                                                        <option value="Startup SaaS">Startup SaaS (Glassmorphism)</option>
-                                                        <option value="Retro Vintage">Retro Vintage</option>
-                                                        <option value="Playful Pop">Playful & Pop</option>
+                                                        {WEBSITE_STYLES.map(s => <option key={s} value={s}>{s}</option>)}
                                                     </select>
+                                                    
+                                                    {/* Type Selector */}
+                                                    <select 
+                                                        value={websiteType}
+                                                        onChange={(e) => setWebsiteType(e.target.value)}
+                                                        className="bg-black/30 border border-white/10 text-xs text-white rounded-lg px-3 py-2 outline-none focus:border-primary max-w-[150px]"
+                                                    >
+                                                        {WEBSITE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                                    </select>
+
                                                     <button onClick={handleInternalBuild} disabled={loading} className="px-4 py-2 bg-primary/10 hover:bg-primary text-primary hover:text-slate-900 text-xs font-bold uppercase rounded-lg transition-colors border border-primary/20">
                                                         {loading && !generatedCode ? 'Building...' : (generatedCode ? 'Regenerate Code' : 'Generate Code')}
                                                     </button>
@@ -956,7 +1009,8 @@ ${outreach?.call_script}
                         </div>
                     )}
 
-                    {stage === 'REVIEW' && (/* ... REVIEW UI ... */ 
+                    {/* STAGE 3: REVIEW */}
+                    {stage === 'REVIEW' && (
                          <div className="animate-fade-in space-y-8">
                             <h2 className="text-xl font-display text-white">Quality Assurance Analysis</h2>
                             {review ? (
@@ -1047,9 +1101,10 @@ ${outreach?.call_script}
                             )}
                         </div>
                     )}
-
-                    {/* STAGE 4: OUTREACH */}
-                    {stage === 'OUTREACH' && (
+                    
+                    {/* STAGE 4: OUTREACH [REDACTED FOR BREVITY - ALREADY IN FILE] */}
+                    {stage === 'OUTREACH' && (/* ... OUTREACH UI ... */ 
+                        // Note: Outreach UI implementation remains the same as previously defined, just ensuring context here
                         <div className="animate-fade-in space-y-8">
                             <h2 className="text-xl font-display text-white">Outreach Deployment Package</h2>
                             
@@ -1245,7 +1300,7 @@ ${outreach?.call_script}
                                             </button>
                                             
                                             <button 
-                                                onClick={handleFinalize} 
+                                                onClick={() => setShowFinalizeConfirm(true)} 
                                                 className="group relative px-10 py-4 bg-gradient-to-r from-primary to-secondary text-slate-900 font-bold rounded-full overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.3)] hover:shadow-[0_0_50px_rgba(6,182,212,0.5)] transition-all"
                                             >
                                                 <div className="absolute inset-0 w-0 bg-white/20 transition-all duration-[250ms] ease-out group-hover:w-full"></div>
@@ -1263,6 +1318,7 @@ ${outreach?.call_script}
                         </div>
                     )}
                     
+                    {/* STAGE 5: SUMMARY (Same as before) */}
                     {stage === 'SUMMARY' && (/* ... SUMMARY UI ... */ 
                         <div className="animate-fade-in space-y-8 pb-10">
                              {/* ... Header ... */}

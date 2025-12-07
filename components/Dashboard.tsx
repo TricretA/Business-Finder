@@ -2,15 +2,21 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import SessionCreator from './SessionCreator';
-import { Session, Business } from '../types';
+import { Session, Business, ProcessingStage } from '../types';
 import { enrichBusinessData } from '../services/gemini';
-import { updateBusinessInDb } from '../services/supabase';
+import { updateBusinessInDb, fetchProjectState } from '../services/supabase';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [currentSession, setCurrentSession] = useState<Partial<Session> | null>(null);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [enrichingId, setEnrichingId] = useState<string | null>(null);
+  
+  // Resume Modal State
+  const [resumeModalOpen, setResumeModalOpen] = useState(false);
+  const [selectedResumeBusiness, setSelectedResumeBusiness] = useState<Business | null>(null);
+  const [projectState, setProjectState] = useState<any>(null);
+  const [loadingState, setLoadingState] = useState(false);
 
   const handleSessionStart = (sessionData: Partial<Session>, results: Business[]) => {
     setCurrentSession(sessionData);
@@ -22,9 +28,49 @@ const Dashboard: React.FC = () => {
     setBusinesses([]);
   };
 
-  const handleProcessBusiness = (business: Business) => {
-    // Navigate to the processor with the business object in state
+  const handleProcessBusiness = async (business: Business) => {
+    // Check if we have data for this business to offer resume capability
+    setLoadingState(true);
+    setSelectedResumeBusiness(business);
+    
+    try {
+        const state = await fetchProjectState(business.id);
+        // If we have any meaningful data (prompt, website, etc.), show resume modal
+        if (state.prompt || state.website || state.outreach) {
+            setProjectState(state);
+            setResumeModalOpen(true);
+            setLoadingState(false);
+            return;
+        }
+    } catch (e) {
+        console.error("Failed to check project state", e);
+    }
+    
+    // Default: Start fresh if no data found
+    setLoadingState(false);
     navigate('/process', { state: { business } });
+  };
+  
+  const handleResumeStage = (stage: ProcessingStage) => {
+      if (!selectedResumeBusiness || !projectState) return;
+      
+      // Construct the state object based on what we fetched
+      const navigationState = {
+          business: selectedResumeBusiness,
+          stage: stage,
+          prompt: projectState.prompt || '',
+          websiteUrl: projectState.website?.url || '',
+          generatedCode: projectState.website?.code || '',
+          screenshot: projectState.website?.screenshot || null,
+          review: projectState.review || null,
+          outreach: projectState.outreach || null
+      };
+      
+      // Save to local storage to ensure persistence logic in BusinessProcessor picks it up
+      localStorage.setItem(`proc_${selectedResumeBusiness.id}`, JSON.stringify(navigationState));
+      
+      setResumeModalOpen(false);
+      navigate('/process', { state: navigationState });
   };
 
   const handleEnrichBusiness = async (e: React.MouseEvent, business: Business) => {
@@ -35,12 +81,6 @@ const Dashboard: React.FC = () => {
           const extra = await enrichBusinessData(business);
           
           // 2. Persist to DB
-          // We map enriched data to columns where possible, or store as needed.
-          // Since DB has specific columns, we'll try to update those.
-          // Media assets -> media column (jsonb)
-          // Phones -> phone column (using primary)
-          // We can also stringify everything else into 'notes' for safekeeping if needed, 
-          // or just rely on 'media' and 'phone'.
           const updates: any = {};
           if (extra.enriched_data) {
               if (extra.enriched_data.phones && extra.enriched_data.phones.length > 0) {
@@ -49,8 +89,6 @@ const Dashboard: React.FC = () => {
               if (extra.enriched_data.media_assets) {
                   updates.media = extra.enriched_data.media_assets; // JSONB array
               }
-              // Ideally we'd have an 'enriched_data' column, but we stick to schema provided.
-              // We'll update the 'notes' with the extra info just in case
               updates.notes = `Services: ${extra.enriched_data.services?.join(', ')}. Socials: ${extra.enriched_data.social_links?.join(', ')}`;
           }
           
@@ -70,7 +108,97 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background text-slate-200 p-6 flex flex-col">
+    <div className="min-h-screen bg-background text-slate-200 p-6 flex flex-col relative">
+      {/* Resume Modal */}
+      {resumeModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in">
+              <div className="bg-slate-900 border border-white/10 rounded-3xl p-8 max-w-lg w-full relative">
+                  <button onClick={() => setResumeModalOpen(false)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                  <h3 className="text-xl font-display font-bold text-white mb-2">Resume Mission</h3>
+                  <p className="text-sm text-slate-400 mb-6">Existing intelligence found for <span className="text-white font-bold">{selectedResumeBusiness?.name}</span>. Where would you like to continue?</p>
+                  
+                  <div className="space-y-3">
+                      <button 
+                        onClick={() => handleResumeStage('PROMPT')}
+                        className={`w-full p-4 rounded-xl border flex items-center justify-between group transition-all
+                        ${projectState?.prompt ? 'bg-green-500/10 border-green-500/30 hover:bg-green-500/20' : 'bg-slate-800 border-slate-700 opacity-50'}`}
+                      >
+                          <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-xs font-bold">1</div>
+                              <div className="text-left">
+                                  <div className="text-sm font-bold text-white">Blueprint Stage</div>
+                                  <div className="text-[10px] text-slate-400">{projectState?.prompt ? 'Prompt Generated' : 'Not Started'}</div>
+                              </div>
+                          </div>
+                          {projectState?.prompt && <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                      </button>
+
+                      <button 
+                        onClick={() => handleResumeStage('BUILD')}
+                        className={`w-full p-4 rounded-xl border flex items-center justify-between group transition-all
+                        ${projectState?.website?.code ? 'bg-green-500/10 border-green-500/30 hover:bg-green-500/20' : 'bg-slate-800 border-slate-700'}`}
+                      >
+                          <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-xs font-bold">2</div>
+                              <div className="text-left">
+                                  <div className="text-sm font-bold text-white">Build Stage</div>
+                                  <div className="text-[10px] text-slate-400">{projectState?.website?.code ? 'Code Available' : 'Ready to Build'}</div>
+                              </div>
+                          </div>
+                          {projectState?.website?.code && <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                      </button>
+
+                      <button 
+                        onClick={() => handleResumeStage('REVIEW')}
+                        disabled={!projectState?.website?.code}
+                        className={`w-full p-4 rounded-xl border flex items-center justify-between group transition-all
+                        ${projectState?.review ? 'bg-green-500/10 border-green-500/30 hover:bg-green-500/20' : (projectState?.website?.code ? 'bg-slate-800 border-white/10 hover:border-primary' : 'bg-slate-800 border-slate-700 opacity-50 cursor-not-allowed')}`}
+                      >
+                          <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-xs font-bold">3</div>
+                              <div className="text-left">
+                                  <div className="text-sm font-bold text-white">Review Stage</div>
+                                  <div className="text-[10px] text-slate-400">{projectState?.review ? 'Review Completed' : 'Pending Review'}</div>
+                              </div>
+                          </div>
+                          {projectState?.review && <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                      </button>
+
+                       <button 
+                        onClick={() => handleResumeStage('OUTREACH')}
+                        disabled={!projectState?.review}
+                        className={`w-full p-4 rounded-xl border flex items-center justify-between group transition-all
+                        ${projectState?.outreach ? 'bg-green-500/10 border-green-500/30 hover:bg-green-500/20' : (projectState?.review ? 'bg-slate-800 border-white/10 hover:border-primary' : 'bg-slate-800 border-slate-700 opacity-50 cursor-not-allowed')}`}
+                      >
+                          <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-xs font-bold">4</div>
+                              <div className="text-left">
+                                  <div className="text-sm font-bold text-white">Outreach Stage</div>
+                                  <div className="text-[10px] text-slate-400">{projectState?.outreach ? 'Assets Ready' : 'Pending Generation'}</div>
+                              </div>
+                          </div>
+                          {projectState?.outreach && <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
+                      </button>
+
+                      <button 
+                        onClick={() => handleResumeStage('SUMMARY')}
+                        className={`w-full p-4 rounded-xl border flex items-center justify-between group transition-all hover:bg-white/5 border-white/10`}
+                      >
+                          <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-xs font-bold">5</div>
+                              <div className="text-left">
+                                  <div className="text-sm font-bold text-white">Summary Dashboard</div>
+                                  <div className="text-[10px] text-slate-400">View All Progress</div>
+                              </div>
+                          </div>
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* Header */}
       <header className="flex items-center justify-between mb-8 pb-4 border-b border-white/5">
         <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
@@ -253,12 +381,19 @@ const Dashboard: React.FC = () => {
                                     </button>
                                     <button 
                                         onClick={() => handleProcessBusiness(biz)}
-                                        className="py-4 px-4 rounded-xl bg-white/5 hover:bg-primary text-white hover:text-slate-900 font-bold text-sm transition-all flex items-center justify-center gap-2 group-hover:shadow-[0_0_20px_rgba(6,182,212,0.3)]"
+                                        disabled={loadingState && selectedResumeBusiness?.id === biz.id}
+                                        className="py-4 px-4 rounded-xl bg-white/5 hover:bg-primary text-white hover:text-slate-900 font-bold text-sm transition-all flex items-center justify-center gap-2 group-hover:shadow-[0_0_20px_rgba(6,182,212,0.3)] disabled:opacity-50"
                                     >
-                                        <span>Process Target</span>
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                        </svg>
+                                        {loadingState && selectedResumeBusiness?.id === biz.id ? (
+                                            <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                        ) : (
+                                            <>
+                                                <span>Process Target</span>
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                                </svg>
+                                            </>
+                                        )}
                                     </button>
                                 </div>
                             </div>
