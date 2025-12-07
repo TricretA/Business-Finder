@@ -32,14 +32,19 @@ const WEBSITE_STYLES = [
     "Brutalist Bold", "Startup SaaS", "Retro Vintage", "Playful Pop",
     "Neumorphism Soft", "Cyberpunk Neon", "Bento Grid Layout", 
     "Typographic Editorial", "Monochromatic Focus", "Nature/Eco Friendly",
-    "Industrial Raw", "Glassmorphism Frost", "Material Design 3", "Apple-esque"
+    "Industrial Raw", "Glassmorphism Frost", "Material Design 3", "Apple-esque",
+    "Pastel Dream", "Grunge Underground", "Art Deco Gold", "Swiss International",
+    "Y2K Nostalgia", "Futuristic Sci-Fi", "Organic Boho", "Isometric 3D",
+    "Abstract Geometric", "Hand-Drawn Doodle"
 ];
 
 const WEBSITE_TYPES = [
     "Landing Page", "Multi-Page Site", "Portfolio/Showcase", "E-commerce/Store",
     "SaaS Dashboard", "Blog/News Magazine", "Restaurant/Menu", "Real Estate Listing",
     "Event/Conference", "Non-Profit/Charity", "Medical/Clinic", "Legal Firm",
-    "Educational/Course", "Gym/Fitness", "Hotel/Booking", "Personal Resume"
+    "Educational/Course", "Gym/Fitness", "Hotel/Booking", "Personal Resume",
+    "Construction/Trades", "Beauty/Spa", "Automotive/Repair", "Photography Studio",
+    "Digital Agency", "Architecture Firm", "Crypto/Web3", "Coming Soon Page"
 ];
 
 const BusinessProcessor: React.FC = () => {
@@ -122,14 +127,26 @@ const BusinessProcessor: React.FC = () => {
     }
   }, [business?.id, location.state]);
 
+  // Auto-Save Effect (Local Only) on state change
   useEffect(() => {
-    // Save state whenever it changes
     if (business?.id) {
         localStorage.setItem(`proc_${business.id}`, JSON.stringify({
             stage, prompt, websiteUrl, screenshot, review, outreach, business, generatedCode
         }));
     }
   }, [business, stage, prompt, websiteUrl, screenshot, review, outreach, generatedCode]);
+
+  // Auto-Save Effect (DB Sync) every 60 seconds
+  useEffect(() => {
+      const interval = setInterval(() => {
+          if (business?.id) {
+              handleManualSave(true);
+          }
+      }, 60000); // 60 seconds
+
+      return () => clearInterval(interval);
+  }, [business, prompt, websiteUrl, generatedCode, review, outreach]);
+
 
   // Effect to scroll to code snippet when critique is hovered
   useEffect(() => {
@@ -161,7 +178,7 @@ const BusinessProcessor: React.FC = () => {
       setTimeout(() => setToast(null), 3000);
   };
 
-  const handleManualSave = async () => {
+  const handleManualSave = async (silent = false) => {
     if (business?.id) {
         // Save local
         localStorage.setItem(`proc_${business.id}`, JSON.stringify({
@@ -170,15 +187,18 @@ const BusinessProcessor: React.FC = () => {
         
         // Save to Supabase (only current relevant data)
         try {
-            if (outreach) await saveOutreachToDb(business.id, outreach);
-            if (review) await saveReviewToDb(business.id, review);
-            if (websiteUrl) await saveWebsiteToDb(business.id, websiteUrl, generatedCode, screenshot || '');
-            if (prompt) await savePromptToDb(business.id, prompt);
+            const promises = [];
+            if (outreach) promises.push(saveOutreachToDb(business.id, outreach));
+            if (review) promises.push(saveReviewToDb(business.id, review));
+            if (websiteUrl) promises.push(saveWebsiteToDb(business.id, websiteUrl, generatedCode, screenshot || ''));
+            if (prompt) promises.push(savePromptToDb(business.id, prompt));
             
-            showToast("Session Saved to Supabase");
+            await Promise.all(promises);
+            
+            if (!silent) showToast("Session Saved to Supabase");
         } catch (e) {
             console.error(e);
-            showToast("Saved Locally (DB Error)");
+            if (!silent) showToast("Saved Locally (DB Error)");
         }
     }
   };
@@ -220,7 +240,7 @@ const BusinessProcessor: React.FC = () => {
              await updateBusinessInDb(business.id, updates);
         }
 
-        setBusiness(prev => prev ? ({ ...prev, ...extra, enriched_data: { ...prev.enriched_data, ...extra.enriched_data } }) : null);
+        setBusiness(prev => prev ? ({ ...prev, ...extra, enriched_data: { ...prev.enriched_data, ...extra.enriched_data } } as Business) : null);
         showToast("Deep Research Completed");
     } catch (e) {
         alert("Enrichment failed");
@@ -286,15 +306,23 @@ const BusinessProcessor: React.FC = () => {
           // Now passing designStyle AND websiteType
           const code = await generateWebsiteCode(business, prompt, designStyle, websiteType);
           setGeneratedCode(code);
-          const url = `${business.name.replace(/\s/g, '').toLowerCase()}.internal-preview.com`;
-          setWebsiteUrl(url);
-          const shot = "https://placehold.co/1200x800/1e293b/14b8a6?text=Internal+Build+Generated.+Reviewing+Code+Structure.";
+          
+          // GENERATE PERMANENT LINK
+          // This constructs a link to the viewer route
+          // Ensure we are using the origin to create a full permalink if needed, or relative for app routing
+          const permLink = `${window.location.origin}/#/view/${business.id}`;
+          
+          setWebsiteUrl(permLink);
+          
+          const shot = `https://placehold.co/1200x800/1e293b/14b8a6?text=Site+Ready:+${designStyle.replace(/\s/g, '+')}`;
           setScreenshot(shot);
           
-          // DB Save
-          await saveWebsiteToDb(business.id, url, code, shot);
+          // DB Save - Code is saved to DB, so permLink will work when visited
+          await saveWebsiteToDb(business.id, permLink, code, shot);
+          showToast("Website Generated & Live Link Created");
       } catch (e) {
           alert("Internal build failed");
+          console.error(e);
       } finally {
           setLoading(false);
       }
@@ -327,7 +355,10 @@ const BusinessProcessor: React.FC = () => {
   };
 
   const handleOpenPreview = () => {
-      if (generatedCode) {
+      // Prioritize opening the permanent link if available, otherwise blob
+      if (websiteUrl && websiteUrl.includes('/view/')) {
+          window.open(websiteUrl, '_blank');
+      } else if (generatedCode) {
           const blob = new Blob([generatedCode], { type: 'text/html' });
           const url = URL.createObjectURL(blob);
           window.open(url, '_blank');
@@ -348,7 +379,7 @@ const BusinessProcessor: React.FC = () => {
 - Services: ${business.enriched_data?.services?.join(', ') || 'N/A'}
 
 ## 2. Website Strategy
-**Generated URL:** ${websiteUrl}
+**Live Demo URL:** ${websiteUrl}
 **Design Score:** ${review?.design_score || 'N/A'}/10
 **Conversion Score:** ${review?.conversion_score || 'N/A'}/10
 
@@ -406,9 +437,6 @@ ${outreach?.call_script}
             // DB Save
             if(business?.id) await saveWebsiteToDb(business.id, websiteUrl, newCode, screenshot || '');
             showToast("Fixes Applied In-Place. Code Updated.");
-            
-            // Re-trigger review with new code automatically? Optional.
-            // For now, just show the updated code.
           } else {
             showToast("AI made no significant changes.");
           }
@@ -950,7 +978,7 @@ ${outreach?.call_script}
                                                     </div>
                                                     <div className="flex flex-col gap-4">
                                                         <div className="flex gap-2">
-                                                            <button onClick={handleOpenPreview} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-white rounded-lg border border-white/5 flex items-center justify-center gap-2"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg> Open in New Tab</button>
+                                                            <button onClick={handleOpenPreview} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-white rounded-lg border border-white/5 flex items-center justify-center gap-2"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg> Open Permanent Link</button>
                                                             <button onClick={handleCopyCode} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-white rounded-lg border border-white/5 flex items-center justify-center gap-2"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg> Copy Code</button>
                                                         </div>
                                                         <div className="flex gap-2 bg-black/20 p-2 rounded-lg border border-white/5">
@@ -992,12 +1020,13 @@ ${outreach?.call_script}
                                 )}
                             </div>
                             <div className="flex justify-end pt-4 gap-4 items-center flex-col md:flex-row">
-                                {generatedCode ? (
+                                {generatedCode && websiteUrl && (
                                     <div className="flex items-center gap-2 md:mr-4 bg-green-500/10 px-4 py-2 rounded-full border border-green-500/20">
                                          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                                         <span className="text-xs font-bold text-green-400 uppercase tracking-wide">Digital Twin Ready for Inspection</span>
+                                         <span className="text-xs font-bold text-green-400 uppercase tracking-wide">Live at: {websiteUrl}</span>
                                     </div>
-                                ) : (
+                                )}
+                                {!generatedCode && (
                                     <button onClick={handleSimulateDraft} disabled={loading} className="text-xs text-slate-500 hover:text-white underline underline-offset-4">
                                         Simulate Draft (Testing)
                                     </button>
@@ -1294,7 +1323,7 @@ ${outreach?.call_script}
                                         </div>
                                         
                                         <div className="flex gap-4">
-                                            <button onClick={handleManualSave} className="px-8 py-4 bg-slate-800 text-slate-300 hover:text-white border border-white/10 rounded-full font-bold hover:bg-slate-700 transition-all flex items-center gap-2">
+                                            <button onClick={() => handleManualSave(false)} className="px-8 py-4 bg-slate-800 text-slate-300 hover:text-white border border-white/10 rounded-full font-bold hover:bg-slate-700 transition-all flex items-center gap-2">
                                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
                                                 Save Draft
                                             </button>

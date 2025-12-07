@@ -278,13 +278,17 @@ export const refineWebsitePrompt = async (currentPrompt: string, feedback: strin
 export const generateWebsiteCode = async (business: Business, approvedPrompt: string, designStyle: string = "Modern Professional", websiteType: string = "Landing Page"): Promise<string> => {
     const ai = getAiClient();
 
+    const mediaAssets = business.enriched_data?.media_assets 
+        ? JSON.stringify(business.enriched_data.media_assets) 
+        : "[]";
+
     const prompt = `You are an expert Frontend Developer.
     Create a high-converting, MULTI-PAGE website for "${business.name}" based on this approved blueprint:
     
     "${approvedPrompt}"
     
     **DESIGN PARAMETERS**:
-    - **STYLE**: ${designStyle} (Adhere STRICTLY to this aesthetic).
+    - **STYLE**: ${designStyle} (Adhere STRICTLY to this aesthetic. If "Brutalist", use thick borders and contrast. If "Minimal", use whitespace. If "Luxury", use serifs and gold/black).
     - **TYPE**: ${websiteType} (Optimize layout for this specific use-case).
     
     **CRITICAL TECHNICAL REQUIREMENTS**:
@@ -298,13 +302,13 @@ export const generateWebsiteCode = async (business: Business, approvedPrompt: st
     5. **Design**: Use high-quality Tailwind utility classes for a premium look (shadows, rounded corners, gradients, responsive grids).
     6. **Icons**: Use Font Awesome (via CDN).
     
-    **IMAGE GENERATION INSTRUCTIONS (IMPORTANT)**:
-    - Do NOT use broken placeholder images.
-    - You MUST use the following URL format to "generate" images relevant to the business:
+    **IMAGE & MEDIA STRATEGY (CRITICAL)**:
+    - **PRIORITY 1 (REAL ASSETS)**: You have access to these discovered images: ${mediaAssets}. USE THEM in your <img> tags where appropriate (e.g., gallery, hero).
+    - **PRIORITY 2 (UNSPLASH/STOCK)**: If no real assets fit, try to use high-quality Unsplash-style stock photo URLs. 
+    - **PRIORITY 3 (AI GENERATION)**: If you cannot find a specific image, generate one using:
       \`https://image.pollinations.ai/prompt/{description}?nologo=true\`
-    - Example: For a dentist, use \`https://image.pollinations.ai/prompt/dentist%20clinic%20modern?nologo=true\`.
-    - Example: For a hero background, use \`https://image.pollinations.ai/prompt/abstract%20${designStyle.replace(' ', '%20')}%20background?nologo=true\`.
-    - Ensure every image tag has a valid src using this method.
+      Example: \`https://image.pollinations.ai/prompt/dentist%20clinic%20modern?nologo=true\`
+    - **DO NOT** use empty src="" or broken placeholders. Every image must load something visual.
     
     **OUTPUT**:
     - Return ONLY the raw HTML code (starting with <!DOCTYPE html>).

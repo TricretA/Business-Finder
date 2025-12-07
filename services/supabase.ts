@@ -176,6 +176,21 @@ export const saveWebsiteToDb = async (businessId: string, url: string, sourceCod
     }
 };
 
+export const fetchWebsiteCode = async (businessId: string): Promise<string | null> => {
+    const { data, error } = await supabase
+        .from('websites')
+        .select('source_code')
+        .eq('business_id', businessId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+    
+    if (error || !data) {
+        return null;
+    }
+    return data.source_code;
+};
+
 // --- REVIEWS ---
 
 export const saveReviewToDb = async (businessId: string, review: WebsiteReview) => {
